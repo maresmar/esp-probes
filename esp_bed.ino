@@ -92,10 +92,12 @@ void setupMqtt()
 
 void loop()
 {
-  if(WiFi.isConnected() && !mqtt_client.connected()) {
+  if (WiFi.isConnected() && !mqtt_client.connected())
+  {
     setupMqtt();
   }
-  if(mqtt_client.connected()) {
+  if (mqtt_client.connected())
+  {
     mqtt_client.poll();
     mqtt_client.beginMessage(mqtt_topic);
 
@@ -128,6 +130,14 @@ void loop()
     mqtt_client.print(WiFi.RSSI());
     Serial.print(WiFi.RSSI());
     Serial.println(" db");
+
+    Serial.print("Battery = ");
+    mqtt_client.print(", \"battery\": ");
+    // We have two resistors (72k + 92k) Ohms
+    int mVoltage = 3300 * (719 + 927) / 719 * analogRead(A0) / 1024;
+    mqtt_client.print((float)mVoltage / 1000);
+    Serial.print((float)mVoltage / 1000);
+    Serial.println(" V");
 
     Serial.println();
     mqtt_client.print("}");
