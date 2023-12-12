@@ -25,6 +25,7 @@ MqttClient mqtt_client(wifi_client);
 
 void setup()
 {
+  // Input - output
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
   Serial.begin(9600);
@@ -33,8 +34,14 @@ void setup()
   Serial.print("Attempting to connect to WIFI SSID: ");
   Serial.println(wifi_ssid);
 
+  WiFi.mode(WIFI_STA);
+  wifi_set_sleep_type(LIGHT_SLEEP_T);
+  WiFi.setSleepMode(WIFI_LIGHT_SLEEP, 3);  // Automatic Light Sleep, DTIM listen interval = 3
+  WiFi.setAutoReconnect(true);
+
   WiFi.onEvent(onStaGotIp, WIFI_EVENT_STAMODE_GOT_IP);
   WiFi.onEvent(onStaDisconnected, WIFI_EVENT_STAMODE_DISCONNECTED);
+
   WiFi.begin(wifi_ssid, wifi_pass);
 
   // Setup  BMP180
@@ -65,7 +72,6 @@ void onStaGotIp(WiFiEvent_t event)
 {
   Serial.print("WiFi connected, ");
   Serial.println(WiFi.localIP());
-  WiFi.setAutoReconnect(true);
 }
 
 void onStaDisconnected(WiFiEvent_t event)
