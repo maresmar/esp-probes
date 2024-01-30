@@ -25,130 +25,107 @@ MqttClient mqtt_client(wifi_client);
 
 void setup()
 {
-  // Input - output
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
   Serial.begin(9600);
+  // Input - output
+  // pinMode(LED_BUILTIN, OUTPUT);
+  // digitalWrite(LED_BUILTIN, LOW);
 
-  // Setup WiFi
-  Serial.print("Attempting to connect to WIFI SSID: ");
-  Serial.println(wifi_ssid);
+  system_deep_sleep_set_option(2);
 
+  setupWifi();
+  setupSensors();
+  waitWifi();
+  setupMqtt();
+}
+
+inline void setupWifi()
+{
   WiFi.mode(WIFI_STA);
   wifi_set_sleep_type(LIGHT_SLEEP_T);
-  WiFi.setSleepMode(WIFI_LIGHT_SLEEP, 3);  // Automatic Light Sleep, DTIM listen interval = 3
-  WiFi.setAutoReconnect(true);
-
-  WiFi.onEvent(onStaGotIp, WIFI_EVENT_STAMODE_GOT_IP);
-  WiFi.onEvent(onStaDisconnected, WIFI_EVENT_STAMODE_DISCONNECTED);
-
   WiFi.begin(wifi_ssid, wifi_pass);
+}
 
+inline void waitWifi()
+{
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    delay(1000);
+  }
+}
+
+inline void setupSensors()
+{
   // Setup  BMP180
   if (!bmp.begin())
   {
     Serial.println("Could not find a valid BMP085/BMP180 sensor, check wiring!");
-    while (1)
-      ;
+    system_deep_sleep_instant(60000 * 1000);
   }
 
   // Setup SHT31
   if (!sht31.begin(0x44))
   {
     Serial.println("Could not find a valid SHT3x sensor, check wiring!");
-    while (1)
-      ;
-  }
-
-  Serial.println("Waiting on WiFi connection:");
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    Serial.print(".");
-    delay(2000);
+    system_deep_sleep_instant(60000 * 1000);
   }
 }
 
-void onStaGotIp(WiFiEvent_t event)
+inline void setupMqtt()
 {
-  Serial.print("WiFi connected, ");
-  Serial.println(WiFi.localIP());
-}
-
-void onStaDisconnected(WiFiEvent_t event)
-{
-  Serial.println("WiFi lost");
-}
-
-void setupMqtt()
-{
-  Serial.print("Attempting to connect to the MQTT broker: ");
-  Serial.println(mqtt_broker);
-
   if (!mqtt_client.connect(mqtt_broker, mqtt_port))
   {
     Serial.print("MQTT connection failed! Error code = ");
     Serial.println(mqtt_client.connectError());
   }
-  else
-  {
-    Serial.println("You're connected to the MQTT broker!");
-    digitalWrite(LED_BUILTIN, HIGH);
-  }
 }
 
 void loop()
 {
-  if (WiFi.isConnected() && !mqtt_client.connected())
-  {
-    setupMqtt();
-  }
-  if (mqtt_client.connected())
-  {
-    mqtt_client.poll();
-    mqtt_client.beginMessage(mqtt_topic);
+  mqtt_client.beginMessage(mqtt_topic);
 
-    Serial.print("Temperature = ");
-    mqtt_client.print("{\"temp\": ");
-    Serial.print(sht31.readTemperature());
-    mqtt_client.print(sht31.readTemperature());
+  Serial.print("Temperature = ");
+  mqtt_client.print("{\"temp\": ");
+  Serial.print(sht31.readTemperature());
+  mqtt_client.print(sht31.readTemperature());
 
-    Serial.print(" / ");
-    mqtt_client.print(", \"bmp_temp\": ");
-    Serial.print(bmp.readTemperature());
-    mqtt_client.print(bmp.readTemperature());
-    Serial.println(" *C");
+  Serial.print(" / ");
+  mqtt_client.print(", \"bmp_temp\": ");
+  Serial.print(bmp.readTemperature());
+  mqtt_client.print(bmp.readTemperature());
+  Serial.println(" *C");
 
-    Serial.print("Humidity = ");
-    mqtt_client.print(", \"humidity\": ");
-    Serial.print(sht31.readHumidity());
-    mqtt_client.print(sht31.readHumidity());
-    Serial.println(" %");
+  Serial.print("Humidity = ");
+  mqtt_client.print(", \"humidity\": ");
+  Serial.print(sht31.readHumidity());
+  mqtt_client.print(sht31.readHumidity());
+  Serial.println(" %");
 
-    Serial.print("Pressure = ");
-    mqtt_client.print(", \"pressure\": ");
-    float hPa = bmp.readPressure() / 100.0;
-    mqtt_client.print(hPa);
-    Serial.print(hPa);
-    Serial.println(" hPa");
+  Serial.print("Pressure = ");
+  mqtt_client.print(", \"pressure\": ");
+  float hPa = bmp.readPressure() / 100.0;
+  mqtt_client.print(hPa);
+  Serial.print(hPa);
+  Serial.println(" hPa");
 
-    Serial.print("RSSI = ");
-    mqtt_client.print(", \"rssi\": ");
-    mqtt_client.print(WiFi.RSSI());
-    Serial.print(WiFi.RSSI());
-    Serial.println(" db");
+  Serial.print("RSSI = ");
+  mqtt_client.print(", \"rssi\": ");
+  mqtt_client.print(WiFi.RSSI());
+  Serial.print(WiFi.RSSI());
+  Serial.println(" db");
 
-    Serial.print("Battery = ");
-    mqtt_client.print(", \"battery\": ");
-    // We have two resistors (72k + 92k) Ohms
-    int mVoltage = 3300 * (719 + 927) / 719 * analogRead(A0) / 1024;
-    mqtt_client.print((float)mVoltage / 1000);
-    Serial.print((float)mVoltage / 1000);
-    Serial.println(" V");
+  Serial.print("Battery = ");
+  mqtt_client.print(", \"battery\": ");
+  // We have two resistors (72k + 92k) Ohms
+  int mVoltage = 3300 * (719 + 927) / 719 * analogRead(A0) / 1024;
+  mqtt_client.print((float)mVoltage / 1000);
+  Serial.print((float)mVoltage / 1000);
+  Serial.println(" V");
 
-    Serial.println();
-    mqtt_client.print("}");
-    mqtt_client.endMessage();
-  }
+  Serial.println();
+  mqtt_client.print("}");
+  mqtt_client.endMessage();
 
-  delay(60000);
+  delay(1000);
+  system_deep_sleep_instant(59000 * 1000);
 }
