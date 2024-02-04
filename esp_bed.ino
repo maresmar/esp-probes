@@ -15,8 +15,10 @@ char wifi_ssid[] = WIFI_ESSID;
 char wifi_pass[] = WIFI_PASSWORD;
 
 const char mqtt_broker[] = MQTT_HOST;
-int mqtt_port = MQTT_PORT;
+const int  mqtt_port = MQTT_PORT;
 const char mqtt_topic[] = MQTT_TOPIC;
+
+const int sleep_sec = 5*60;
 
 Adafruit_SHT31 sht31;
 Adafruit_BMP085 bmp;
@@ -25,10 +27,12 @@ MqttClient mqtt_client(wifi_client);
 
 void setup()
 {
-  Serial.begin(9600);
   // Input - output
-  // pinMode(LED_BUILTIN, OUTPUT);
-  // digitalWrite(LED_BUILTIN, LOW);
+  pinMode(D0, WAKEUP_PULLUP);
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  Serial.begin(9600);
 
   system_deep_sleep_set_option(2);
 
@@ -47,10 +51,12 @@ inline void setupWifi()
 
 inline void waitWifi()
 {
+  WiFi.waitForConnectResult(10000);
   while (WiFi.status() != WL_CONNECTED)
   {
-    Serial.print(".");
-    delay(1000);
+    Serial.print("WiFi didn't connect");
+    Serial.flush();
+    system_deep_sleep_instant(sleep_sec * 1e6);
   }
 }
 
@@ -60,14 +66,16 @@ inline void setupSensors()
   if (!bmp.begin())
   {
     Serial.println("Could not find a valid BMP085/BMP180 sensor, check wiring!");
-    system_deep_sleep_instant(60000 * 1000);
+    Serial.flush();
+    system_deep_sleep_instant(sleep_sec * 1e6);
   }
 
   // Setup SHT31
   if (!sht31.begin(0x44))
   {
     Serial.println("Could not find a valid SHT3x sensor, check wiring!");
-    system_deep_sleep_instant(60000 * 1000);
+    Serial.flush();
+    system_deep_sleep_instant(sleep_sec * 1e6);
   }
 }
 
@@ -77,6 +85,8 @@ inline void setupMqtt()
   {
     Serial.print("MQTT connection failed! Error code = ");
     Serial.println(mqtt_client.connectError());
+    Serial.flush();
+    system_deep_sleep_instant(sleep_sec * 1e6);
   }
 }
 
@@ -127,5 +137,5 @@ void loop()
   mqtt_client.endMessage();
 
   delay(1000);
-  system_deep_sleep_instant(59000 * 1000);
+  system_deep_sleep_instant((sleep_sec - 1) * 1e6);
 }
