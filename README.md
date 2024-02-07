@@ -15,4 +15,7 @@ The `env.h` file is needed with following content:
 #define MQTT_HOST "192.168.0.1"
 #define MQTT_PORT 1883
 #define MQTT_PREFIX "home/room"
+
+#define SLEEP_SEC 5 * 60
+#define debug
 ```

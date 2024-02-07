@@ -20,7 +20,7 @@ const char mqtt_broker[] = MQTT_HOST;
 const int mqtt_port = MQTT_PORT;
 const char mqtt_topic[] = MQTT_TOPIC;
 
-const int sleep_sec = 20;
+const int sleep_sec = SLEEP_SEC;
 unsigned long connectionTime = 0;
 
 static Adafruit_SHT31 sht31;
@@ -40,10 +40,10 @@ void handleError()
 void setup()
 {
   // Input - output
-  // pinMode(LED_BUILTIN, OUTPUT);
-  // digitalWrite(LED_BUILTIN, HIGH);
   pinMode(D0, WAKEUP_PULLUP);
   pinMode(D5, OUTPUT);
+  // Turn on sensors
+  digitalWrite(D5, HIGH);
 
   Serial.begin(74880);
 
@@ -64,8 +64,6 @@ inline void setupWifi()
 
 inline void setupSensors()
 {
-  // Turn on sensors
-  digitalWrite(D5, HIGH);
   // Setup  BMP180
   if (!bmp.begin())
   {
@@ -109,6 +107,7 @@ void loop()
   // We have two resistors (72k + 92k) Ohms
   const int mVoltage = 3300 * (719 + 927) / 719 * analogRead(A0) / 1024;
 
+  // Turn off sensors
   digitalWrite(D5, LOW);
 
 #ifdef debug
