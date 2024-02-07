@@ -11,52 +11,66 @@
 
 #include "env.h"
 
-char wifi_ssid[] = WIFI_ESSID;
-char wifi_pass[] = WIFI_PASSWORD;
+const char wifi_ssid[] = WIFI_ESSID;
+const char wifi_pass[] = WIFI_PASSWORD;
+const byte wifi_chanel = WIFI_CHANEL;
+const byte wifi_bssid[] = WIFI_BSSID;
 
 const char mqtt_broker[] = MQTT_HOST;
-const int  mqtt_port = MQTT_PORT;
+const byte mqtt_port = MQTT_PORT;
 const char mqtt_topic[] = MQTT_TOPIC;
 
-const int sleep_sec = 5*60;
+const int sleep_sec = 5 * 60;
+int connectionTime = -1;
 
-Adafruit_SHT31 sht31;
-Adafruit_BMP085 bmp;
-WiFiClient wifi_client;
-MqttClient mqtt_client(wifi_client);
+static Adafruit_SHT31 sht31;
+static Adafruit_BMP085 bmp;
+static WiFiClient wifi_client;
+static MqttClient mqtt_client(wifi_client);
+
+void handleError()
+{
+  Serial.println("Going sleep...");
+  Serial.flush();
+  delay(5000);
+  digitalWrite(D5, LOW);
+  system_deep_sleep_instant((sleep_sec - 5) * 1e6);
+}
 
 void setup()
 {
   // Input - output
+  // pinMode(LED_BUILTIN, OUTPUT);
+  // digitalWrite(LED_BUILTIN, HIGH);
   pinMode(D0, WAKEUP_PULLUP);
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
+  pinMode(D5, OUTPUT);
 
-  Serial.begin(9600);
+  Serial.begin(74880);
 
   system_deep_sleep_set_option(2);
 
   setupWifi();
-  setupSensors();
   waitWifi();
+  connectionTime = millis();
+  digitalWrite(D5, HIGH);
   setupMqtt();
+  setupSensors();
 }
 
 inline void setupWifi()
 {
   WiFi.mode(WIFI_STA);
   wifi_set_sleep_type(LIGHT_SLEEP_T);
-  WiFi.begin(wifi_ssid, wifi_pass);
+  WiFi.begin(wifi_ssid, wifi_pass, wifi_chanel, wifi_bssid);
 }
 
 inline void waitWifi()
 {
   WiFi.waitForConnectResult(10000);
-  while (WiFi.status() != WL_CONNECTED)
+  if (WiFi.status() != WL_CONNECTED)
   {
     Serial.print("WiFi didn't connect");
-    Serial.flush();
-    system_deep_sleep_instant(sleep_sec * 1e6);
+    handleError();
   }
 }
 
@@ -66,16 +80,14 @@ inline void setupSensors()
   if (!bmp.begin())
   {
     Serial.println("Could not find a valid BMP085/BMP180 sensor, check wiring!");
-    Serial.flush();
-    system_deep_sleep_instant(sleep_sec * 1e6);
+    handleError();
   }
 
   // Setup SHT31
   if (!sht31.begin(0x44))
   {
     Serial.println("Could not find a valid SHT3x sensor, check wiring!");
-    Serial.flush();
-    system_deep_sleep_instant(sleep_sec * 1e6);
+    handleError();
   }
 }
 
@@ -85,8 +97,7 @@ inline void setupMqtt()
   {
     Serial.print("MQTT connection failed! Error code = ");
     Serial.println(mqtt_client.connectError());
-    Serial.flush();
-    system_deep_sleep_instant(sleep_sec * 1e6);
+    handleError();
   }
 }
 
@@ -94,48 +105,66 @@ void loop()
 {
   mqtt_client.beginMessage(mqtt_topic);
 
-  Serial.print("Temperature = ");
-  mqtt_client.print("{\"temp\": ");
-  Serial.print(sht31.readTemperature());
-  mqtt_client.print(sht31.readTemperature());
+  const float sht31_temp = sht31.readTemperature();
+  const float bmp_temp = bmp.readTemperature();
 
+  Serial.print("Temperature = ");
+  Serial.print(sht31_temp);
   Serial.print(" / ");
-  mqtt_client.print(", \"bmp_temp\": ");
-  Serial.print(bmp.readTemperature());
-  mqtt_client.print(bmp.readTemperature());
+  Serial.print(bmp_temp);
   Serial.println(" *C");
 
+  mqtt_client.print("{\"temp\": ");
+  mqtt_client.print(sht31_temp);
+  mqtt_client.print(", \"bmp_temp\": ");
+  mqtt_client.print(bmp_temp);
+
+  const float humidity = sht31.readHumidity();
+
   Serial.print("Humidity = ");
-  mqtt_client.print(", \"humidity\": ");
-  Serial.print(sht31.readHumidity());
-  mqtt_client.print(sht31.readHumidity());
+  Serial.print(humidity);
   Serial.println(" %");
 
+  mqtt_client.print(", \"humidity\": ");
+  mqtt_client.print(humidity);
+
+  const float hPa = bmp.readPressure() / 100.0;
+
   Serial.print("Pressure = ");
-  mqtt_client.print(", \"pressure\": ");
-  float hPa = bmp.readPressure() / 100.0;
-  mqtt_client.print(hPa);
   Serial.print(hPa);
   Serial.println(" hPa");
 
-  Serial.print("RSSI = ");
-  mqtt_client.print(", \"rssi\": ");
-  mqtt_client.print(WiFi.RSSI());
-  Serial.print(WiFi.RSSI());
-  Serial.println(" db");
+  mqtt_client.print(", \"pressure\": ");
+  mqtt_client.print(hPa);
+
+  // We have two resistors (72k + 92k) Ohms
+  const int mVoltage = 3300 * (719 + 927) / 719 * analogRead(A0) / 1024;
 
   Serial.print("Battery = ");
-  mqtt_client.print(", \"battery\": ");
-  // We have two resistors (72k + 92k) Ohms
-  int mVoltage = 3300 * (719 + 927) / 719 * analogRead(A0) / 1024;
-  mqtt_client.print((float)mVoltage / 1000);
   Serial.print((float)mVoltage / 1000);
   Serial.println(" V");
+  mqtt_client.print(", \"battery\": ");
+  mqtt_client.print((float)mVoltage / 1000);
+
+  digitalWrite(D5, LOW);
+
+  const auto rssi = WiFi.RSSI();
+  Serial.print("RSSI = ");
+  mqtt_client.print(", \"rssi\": ");
+  mqtt_client.print(rssi);
+  Serial.print(rssi);
+  Serial.println(" db");
+
+  Serial.print("connectionTime = ");
+  mqtt_client.print(", \"connectionTime\": ");
+  mqtt_client.print(connectionTime);
+  Serial.print(connectionTime);
+  Serial.println(" ms");
 
   Serial.println();
   mqtt_client.print("}");
   mqtt_client.endMessage();
 
-  delay(1000);
-  system_deep_sleep_instant((sleep_sec - 1) * 1e6);
+  delay(2000);
+  system_deep_sleep_instant((sleep_sec - 2) * 1e6);
 }
